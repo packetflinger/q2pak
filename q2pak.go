@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"strings"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 	FileNameLength  = 56
 	FileOffset      = 56
 	FileLength      = 60
+	Separator       = "/"
 )
 
 type PakFile struct {
@@ -39,6 +41,7 @@ func main() {
 		panic(string("Invalid PAK file"))
 	}
 
+	// find the location and size of the meta lump
 	MetaOffset := ReadLong(header, 4)
 	MetaLength := ReadLong(header, 8)
 	FileCount := MetaLength / FileBlockLength
@@ -53,6 +56,7 @@ func main() {
 	block := make([]byte, FileBlockLength)
 	Files := []PakFile{}
 
+	// build a slice of all the files contained and their size/locations
 	for i := 0; i < int(FileCount); i++ {
 		File := PakFile{}
 		_, e = f.Seek(int64(int(MetaOffset)+(i*FileBlockLength)), 0)
@@ -63,25 +67,50 @@ func main() {
 		File.Name = ReadString(block, 0)
 		File.Offset = int(ReadLong(block, FileOffset))
 		File.Length = int(ReadLong(block, FileLength))
-		fmt.Println(File)
+		//fmt.Println(File)
 
 		Files = append(Files, File)
 	}
 
-	_, e = f.Seek(int64(Files[0].Offset), 0)
+	// write the files to the disk
+	for i := range Files {
+		WriteFile(&Files[i], f)
+	}
+
+	f.Close()
+}
+
+/**
+ * Given the name, location and length, get the pak'd file contents
+ * create the file in the file system (relative to where we are
+ * when we run) and write the contents
+ */
+func WriteFile(file *PakFile, pak *os.File) {
+	// pak'd file is in a folded (or multiple), create parent folders first
+	if strings.Contains(file.Name, Separator) {
+		pathparts := strings.Split(file.Name, Separator)
+		path := pathparts[0] // to prevent starting with a separator
+		for i := 1; i < len(pathparts)-1; i++ {
+			path = fmt.Sprintf("%s%s%s", path, Separator, pathparts[i])
+		}
+
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			os.MkdirAll(path, 0700)
+		}
+	}
+
+	_, e := pak.Seek(int64(file.Offset), 0)
 	Check(e)
 
-	fileblob := make([]byte, Files[0].Length)
-	_, e = f.Read(fileblob)
+	fileblob := make([]byte, file.Length)
+	_, e = pak.Read(fileblob)
 	Check(e)
 
-	f2, e := os.Create(Files[0].Name)
+	f2, e := os.Create(file.Name)
 	Check(e)
 	_, e = f2.Write(fileblob)
 	Check(e)
 	f2.Close()
-
-	f.Close()
 }
 
 func Check(e error) {
