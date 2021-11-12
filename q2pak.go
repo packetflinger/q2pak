@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -33,6 +34,21 @@ func main() {
 	flag.Parse()
 	pakfilename := flag.Arg(0)
 
+	if *Create != "" {
+		CreatePak(*Create)
+	} else {
+		Files := ParsePak(pakfilename)
+		if *List {
+			ListFiles(Files)
+		}
+
+		if *Extract {
+			ExtractFiles(Files, pakfilename)
+		}
+	}
+}
+
+func ParsePak(pakfilename string) *[]PakFile {
 	f, e := os.Open(pakfilename)
 	Check(e)
 
@@ -80,25 +96,17 @@ func main() {
 		Files = append(Files, File)
 	}
 
-	if *List {
-		ListFiles(&Files)
-	}
-
-	if *Extract {
-		ExtractFiles(&Files, f)
-	}
-
-	if *Create != "" {
-		CreatePak(".")
-	}
-
 	f.Close()
+	return &Files
 }
 
-func ExtractFiles(files *[]PakFile, pak *os.File) {
+func ExtractFiles(files *[]PakFile, pak string) {
+	f, e := os.Open(pak)
+	Check(e)
 	for _, file := range *files {
-		WriteFile(&file, pak)
+		WriteFile(&file, f)
 	}
+	f.Close()
 }
 
 func ListFiles(files *[]PakFile) {
@@ -108,7 +116,15 @@ func ListFiles(files *[]PakFile) {
 }
 
 func CreatePak(path string) {
-
+	err := filepath.Walk(path,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			fmt.Println(path, info)
+			return nil
+		})
+	Check(err)
 }
 
 /**
