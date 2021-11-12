@@ -35,7 +35,7 @@ func main() {
 	pakfilename := flag.Arg(0)
 
 	if *Create != "" {
-		CreatePak(*Create)
+		CreatePak(*Create, pakfilename)
 	} else {
 		Files := ParsePak(pakfilename)
 		if *List {
@@ -115,16 +115,38 @@ func ListFiles(files *[]PakFile) {
 	}
 }
 
-func CreatePak(path string) {
+func CreatePak(path string, newfile string) {
+	var files []string
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			fmt.Println(path, info)
+
+			if info.IsDir() {
+				return nil
+			}
+
+			files = append(files, path)
 			return nil
 		})
 	Check(err)
+
+	//fmt.Printf("%s\n", hex.Dump(WriteLong(Magic)))
+
+	f2, e := os.Create(newfile)
+	Check(e)
+	_, _ = f2.Write(WriteLong(Magic))
+	_, _ = f2.Write(WriteLong(-1)) // placeholder
+	_, _ = f2.Write(WriteLong(-1)) // placeholder
+	f2.Sync()
+	for _, f := range files {
+		fmt.Println(f)
+
+	}
+
+	f2.Close()
+
 }
 
 /**
@@ -178,6 +200,15 @@ func ReadLong(msg []byte, pos int) int32 {
 
 	//msg.Index += 4
 	return tmp.Value
+}
+
+func WriteLong(in int) []byte {
+	out := make([]byte, 4)
+	out[0] = byte(in & 255)
+	out[1] = byte((in >> 8) & 255)
+	out[2] = byte((in >> 16) & 255)
+	out[3] = byte(in >> 24)
+	return out
 }
 
 /**
