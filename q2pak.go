@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -25,7 +26,14 @@ type PakFile struct {
 }
 
 func main() {
-	f, e := os.Open(os.Args[1])
+	// parse the args
+	List := flag.Bool("list", false, "list the files in the pak")
+	Extract := flag.Bool("extract", false, "Extract all files from the pak")
+	Create := flag.String("create", "", "Create a pack ")
+	flag.Parse()
+	pakfilename := flag.Arg(0)
+
+	f, e := os.Open(pakfilename)
 	Check(e)
 
 	_, e = f.Seek(0, 0)
@@ -72,12 +80,35 @@ func main() {
 		Files = append(Files, File)
 	}
 
-	// write the files to the disk
-	for i := range Files {
-		WriteFile(&Files[i], f)
+	if *List {
+		ListFiles(&Files)
+	}
+
+	if *Extract {
+		ExtractFiles(&Files, f)
+	}
+
+	if *Create != "" {
+		CreatePak(".")
 	}
 
 	f.Close()
+}
+
+func ExtractFiles(files *[]PakFile, pak *os.File) {
+	for _, file := range *files {
+		WriteFile(&file, pak)
+	}
+}
+
+func ListFiles(files *[]PakFile) {
+	for _, file := range *files {
+		fmt.Println(file.Name)
+	}
+}
+
+func CreatePak(path string) {
+
 }
 
 /**
