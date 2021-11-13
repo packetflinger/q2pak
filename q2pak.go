@@ -116,7 +116,9 @@ func ListFiles(files *[]PakFile) {
 }
 
 func CreatePak(path string, newfile string) {
-	var files []string
+	var filenames []string
+	var pakfiles []PakFile
+
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -127,7 +129,7 @@ func CreatePak(path string, newfile string) {
 				return nil
 			}
 
-			files = append(files, path)
+			filenames = append(filenames, path)
 			return nil
 		})
 	Check(err)
@@ -140,13 +142,37 @@ func CreatePak(path string, newfile string) {
 	_, _ = f2.Write(WriteLong(-1)) // placeholder
 	_, _ = f2.Write(WriteLong(-1)) // placeholder
 	f2.Sync()
-	for _, f := range files {
-		fmt.Println(f)
 
+	// write the actual file contents to the pak
+	position := 0
+	for _, f := range filenames {
+		file := PakFile{}
+		fmt.Println(f)
+		file.Name = f
+
+		contents, err := os.ReadFile(file.Name)
+		Check(err)
+		file.Length = len(contents)
+		b, e := f2.Write(contents)
+		Check(e)
+		file.Offset = position
+		position += b
+		pakfiles = append(pakfiles, file)
 	}
 
-	f2.Close()
+	f2.Sync()
+	// write the table of contents
+	for _, f := range pakfiles {
+		name := make([]byte, FileNameLength)
+		_ = copy(name, []byte(f.Name))
 
+		_, _ = f2.Write(name)
+		_, _ = f2.Write(WriteLong(f.Offset))
+		_, _ = f2.Write(WriteLong(f.Length))
+	}
+
+	f2.Sync()
+	f2.Close()
 }
 
 /**
