@@ -174,7 +174,7 @@ func CreatePak(path string, newfile string) {
 	_, e = f2.Seek(int64(4), 0)
 	Check(e)
 
-	_, _ = f2.Write(WriteLong(position + 1))
+	_, _ = f2.Write(WriteLong(position - 1))
 	_, _ = f2.Write(WriteLong(len(pakfiles) * FileBlockLength))
 
 	f2.Sync()
