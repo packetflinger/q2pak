@@ -144,7 +144,7 @@ func CreatePak(path string, newfile string) {
 	f2.Sync()
 
 	// write the actual file contents to the pak
-	position := 0
+	position := HeaderLength + 1
 	for _, f := range filenames {
 		file := PakFile{}
 		fmt.Println(f)
@@ -170,6 +170,12 @@ func CreatePak(path string, newfile string) {
 		_, _ = f2.Write(WriteLong(f.Offset))
 		_, _ = f2.Write(WriteLong(f.Length))
 	}
+
+	_, e = f2.Seek(int64(4), 0)
+	Check(e)
+
+	_, _ = f2.Write(WriteLong(position + 1))
+	_, _ = f2.Write(WriteLong(len(pakfiles) * FileBlockLength))
 
 	f2.Sync()
 	f2.Close()
