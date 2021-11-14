@@ -48,6 +48,12 @@ func main() {
 	}
 }
 
+/**
+ * Parse the file index to get a list of files in the pak
+ * along with their locations and sizes
+ *
+ * Used for LISTing and EXTRACTing
+ */
 func ParsePak(pakfilename string) *[]PakFile {
 	f, e := os.Open(pakfilename)
 	Check(e)
@@ -100,6 +106,9 @@ func ParsePak(pakfilename string) *[]PakFile {
 	return &Files
 }
 
+/**
+ * Dump all files in the pak to disk
+ */
 func ExtractFiles(files *[]PakFile, pak string) {
 	f, e := os.Open(pak)
 	Check(e)
@@ -109,12 +118,18 @@ func ExtractFiles(files *[]PakFile, pak string) {
 	f.Close()
 }
 
+/**
+ * Just output the files contained in the pak
+ */
 func ListFiles(files *[]PakFile) {
 	for _, file := range *files {
 		fmt.Println(file.Name)
 	}
 }
 
+/**
+ * Make a new pak file from a directory in the filesystem
+ */
 func CreatePak(path string, newfile string) {
 	var filenames []string
 	var pakfiles []PakFile
@@ -134,14 +149,13 @@ func CreatePak(path string, newfile string) {
 		})
 	Check(err)
 
-	//fmt.Printf("%s\n", hex.Dump(WriteLong(Magic)))
-
 	f2, e := os.Create(newfile)
 	Check(e)
+
+	// Write the 12 byte header
 	_, _ = f2.Write(WriteLong(Magic))
-	_, _ = f2.Write(WriteLong(-1)) // placeholder
-	_, _ = f2.Write(WriteLong(-1)) // placeholder
-	f2.Sync()
+	_, _ = f2.Write(WriteLong(-1)) // placeholder, update later
+	_, _ = f2.Write(WriteLong(-1)) // placeholder, update later
 
 	// write the actual file contents to the pak
 	position := HeaderLength + 1
@@ -152,23 +166,29 @@ func CreatePak(path string, newfile string) {
 
 		contents, err := os.ReadFile(file.Name)
 		Check(err)
+
 		file.Length = len(contents)
 		b, e := f2.Write(contents)
 		Check(e)
+
 		file.Offset = position
 		position += b
 		pakfiles = append(pakfiles, file)
 	}
 
-	f2.Sync()
-	// write the table of contents
+	// write the index
 	for _, f := range pakfiles {
 		name := make([]byte, FileNameLength)
 		_ = copy(name, []byte(f.Name))
 
-		_, _ = f2.Write(name)
-		_, _ = f2.Write(WriteLong(f.Offset))
-		_, _ = f2.Write(WriteLong(f.Length))
+		_, e = f2.Write(name)
+		Check(e)
+
+		_, e = f2.Write(WriteLong(f.Offset))
+		Check(e)
+
+		_, e = f2.Write(WriteLong(f.Length))
+		Check(e)
 	}
 
 	_, e = f2.Seek(int64(4), 0)
@@ -187,7 +207,7 @@ func CreatePak(path string, newfile string) {
  * when we run) and write the contents
  */
 func WriteFile(file *PakFile, pak *os.File) {
-	// pak'd file is in a folded (or multiple), create parent folders first
+	// pak'd file is in a folders (or multiple), create parent folders first
 	if strings.Contains(file.Name, Separator) {
 		pathparts := strings.Split(file.Name, Separator)
 		path := pathparts[0] // to prevent starting with a separator
