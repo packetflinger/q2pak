@@ -1,8 +1,13 @@
+/**
+ * q2pak can read and write Quake II .pak files.
+ *
+ * author: Joe Reid <claire@packetflinger.com>
+ */
+
 package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"flag"
 	"fmt"
 	"os"
@@ -13,13 +18,16 @@ import (
 const (
 	Magic           = (('K' << 24) + ('C' << 16) + ('A' << 8) + 'P')
 	HeaderLength    = 12
-	FileBlockLength = 64
+	FileBlockLength = 64 // name + offset + lenth
 	FileNameLength  = 56
 	FileOffset      = 56
 	FileLength      = 60
 	Separator       = "/"
 )
 
+/**
+ * This represents a file inside a .pak file, not the .pak itself
+ */
 type PakFile struct {
 	Name   string
 	Offset int
@@ -28,24 +36,34 @@ type PakFile struct {
 
 func main() {
 	// parse the args
-	List := flag.Bool("list", false, "list the files in the pak")
-	Extract := flag.Bool("extract", false, "Extract all files from the pak")
+	List := flag.String("list", "", "list the files in the pak")
+	Extract := flag.String("extract", "", "Extract all files from the pak")
 	Create := flag.String("create", "", "Create a pack ")
 	flag.Parse()
-	pakfilename := flag.Arg(0)
 
 	if *Create != "" {
-		CreatePak(*Create, pakfilename)
+		sourcedir := flag.Arg(0)
+		if sourcedir == "" {
+			Usage()
+			return
+		}
+		CreatePak(sourcedir, *Create)
+	} else if *List != "" {
+		Files := ParsePak(*List)
+		ListFiles(Files)
+	} else if *Extract != "" {
+		Files := ParsePak(*Extract)
+		ExtractFiles(Files, *Extract)
 	} else {
-		Files := ParsePak(pakfilename)
-		if *List {
-			ListFiles(Files)
-		}
-
-		if *Extract {
-			ExtractFiles(Files, pakfilename)
-		}
+		Usage()
 	}
+}
+
+func Usage() {
+	fmt.Println("Usage:")
+	fmt.Printf("%s -list <pakfile>\n", os.Args[0])
+	fmt.Printf("%s -extract <pakfile>\n", os.Args[0])
+	fmt.Printf("%s -create <pakfile> <folder>\n", os.Args[0])
 }
 
 /**
@@ -94,11 +112,10 @@ func ParsePak(pakfilename string) *[]PakFile {
 
 		_, e = f.Read(block)
 		Check(e)
+
 		File.Name = ReadString(block, 0)
 		File.Offset = int(ReadLong(block, FileOffset))
 		File.Length = int(ReadLong(block, FileLength))
-		//fmt.Println(File)
-
 		Files = append(Files, File)
 	}
 
@@ -112,6 +129,7 @@ func ParsePak(pakfilename string) *[]PakFile {
 func ExtractFiles(files *[]PakFile, pak string) {
 	f, e := os.Open(pak)
 	Check(e)
+
 	for _, file := range *files {
 		WriteFile(&file, f)
 	}
@@ -149,13 +167,18 @@ func CreatePak(path string, newfile string) {
 		})
 	Check(err)
 
-	f2, e := os.Create(newfile)
-	Check(e)
+	f2, err := os.Create(newfile)
+	Check(err)
 
 	// Write the 12 byte header
-	_, _ = f2.Write(WriteLong(Magic))
-	_, _ = f2.Write(WriteLong(-1)) // placeholder, update later
-	_, _ = f2.Write(WriteLong(-1)) // placeholder, update later
+	_, err = f2.Write(WriteLong(Magic))
+	Check(err)
+
+	_, err = f2.Write(WriteLong(-1)) // placeholder, update later
+	Check(err)
+
+	_, err = f2.Write(WriteLong(-1)) // placeholder, update later
+	Check(err)
 
 	// write the actual file contents to the pak
 	position := HeaderLength + 1
@@ -168,10 +191,10 @@ func CreatePak(path string, newfile string) {
 		Check(err)
 
 		file.Length = len(contents)
-		b, e := f2.Write(contents)
-		Check(e)
+		b, err := f2.Write(contents)
+		Check(err)
 
-		file.Offset = position
+		file.Offset = position - 1
 		position += b
 		pakfiles = append(pakfiles, file)
 	}
@@ -181,21 +204,24 @@ func CreatePak(path string, newfile string) {
 		name := make([]byte, FileNameLength)
 		_ = copy(name, []byte(f.Name))
 
-		_, e = f2.Write(name)
-		Check(e)
+		_, err := f2.Write(name)
+		Check(err)
 
-		_, e = f2.Write(WriteLong(f.Offset))
-		Check(e)
+		_, err = f2.Write(WriteLong(f.Offset))
+		Check(err)
 
-		_, e = f2.Write(WriteLong(f.Length))
-		Check(e)
+		_, err = f2.Write(WriteLong(f.Length))
+		Check(err)
 	}
 
-	_, e = f2.Seek(int64(4), 0)
-	Check(e)
+	_, err = f2.Seek(int64(4), 0)
+	Check(err)
 
-	_, _ = f2.Write(WriteLong(position - 1))
-	_, _ = f2.Write(WriteLong(len(pakfiles) * FileBlockLength))
+	_, err = f2.Write(WriteLong(position - 1))
+	Check(err)
+
+	_, err = f2.Write(WriteLong(len(pakfiles) * FileBlockLength))
+	Check(err)
 
 	f2.Sync()
 	f2.Close()
@@ -234,26 +260,29 @@ func WriteFile(file *PakFile, pak *os.File) {
 	f2.Close()
 }
 
+/**
+ * Convenience error checking
+ */
 func Check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
+/**
+ * Convert 4 bytes into an actual integer (little endian)
+ */
 func ReadLong(msg []byte, pos int) int32 {
-	var tmp struct {
-		Value int32
-	}
-
-	r := bytes.NewReader(msg[pos : pos+4])
-	if err := binary.Read(r, binary.LittleEndian, &tmp); err != nil {
-		fmt.Println("binary.Read failed:", err)
-	}
-
-	//msg.Index += 4
-	return tmp.Value
+	out := int32(msg[pos])
+	out += int32(msg[pos+1]) << 8
+	out += int32(msg[pos+2]) << 16
+	out += int32(msg[pos+3]) << 24
+	return out
 }
 
+/**
+ * Turn an integer back into 4 bytes (little endian)
+ */
 func WriteLong(in int) []byte {
 	out := make([]byte, 4)
 	out[0] = byte(in & 255)
