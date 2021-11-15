@@ -18,7 +18,7 @@ import (
 const (
 	Magic           = (('K' << 24) + ('C' << 16) + ('A' << 8) + 'P')
 	HeaderLength    = 12
-	FileBlockLength = 64 // name + offset + lenth
+	FileBlockLength = 64 // name + offset + length
 	FileNameLength  = 56
 	FileOffset      = 56
 	FileLength      = 60
@@ -307,7 +307,6 @@ func ReadString(msg []byte, pos int) string {
 
 	// find the next null (terminates the string)
 	for i := pos; msg[i] != 0; i++ {
-		// we hit the end without finding a null
 		if i == len(msg) {
 			break
 		}
