@@ -22,7 +22,7 @@ const (
 	FileNameLength  = 56
 	FileOffset      = 56
 	FileLength      = 60
-	Separator       = "/"
+	Separator       = "/" // always use linux-style, even on windows
 )
 
 /**
@@ -202,6 +202,9 @@ func CreatePak(path string, newfile string) {
 	// write the index
 	for _, f := range pakfiles {
 		name := make([]byte, FileNameLength)
+		if strings.Contains(f.Name, "\\") {
+			f.Name = strings.ReplaceAll(f.Name, "\\", Separator)
+		}
 		_ = copy(name, []byte(f.Name))
 
 		_, err := f2.Write(name)
