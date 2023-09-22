@@ -116,6 +116,9 @@ func ParsePak(pakfilename string) *[]PakFile {
 		File.Name = ReadString(block, 0)
 		File.Offset = int(ReadLong(block, FileOffset))
 		File.Length = int(ReadLong(block, FileLength))
+		if File.Length == 0 {
+			continue
+		}
 		Files = append(Files, File)
 	}
 
